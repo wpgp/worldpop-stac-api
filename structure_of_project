@@ -1,4 +1,4 @@
-stac-fastapi-wp:
+worldpop-stac-api:
 ├── wpstac
 │   ├── core
 │   │   ├── __init__.py
@@ -27,6 +27,7 @@ stac-fastapi-wp:
 ├── .gitignore
 ├── Dockerfile
 ├── favicon.ico
+├── LICENSE
 ├── pyproject.toml
 ├── requirements.txt
 └── setup.py
