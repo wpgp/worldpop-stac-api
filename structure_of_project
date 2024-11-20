@@ -1,0 +1,32 @@
+stac-fastapi-wp:
+├── wpstac
+│   ├── core
+│   │   ├── __init__.py
+│   │   ├── base.py
+│   │   ├── collections.py
+│   │   ├── items.py
+│   │   └── search.py
+│   ├── extensions
+│   │   ├── __init__.py
+│   │   ├── filter.py
+│   │   └── query.py
+│   ├── models
+│   │   ├── __init__.py
+│   │   └── search.py
+│   ├── utils
+│   │   ├── __init__.py
+│   │   ├── cache.py
+│   │   ├── fields.py
+│   │   └── links.py
+│   ├── __init__.py
+│   ├── app.py
+│   ├── config.py
+│   ├── db.py
+│   ├── endpoints.py
+│   └── version.py
+├── .gitignore
+├── Dockerfile
+├── favicon.ico
+├── pyproject.toml
+├── requirements.txt
+└── setup.py
