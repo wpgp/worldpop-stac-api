@@ -4,6 +4,7 @@ from wpstac.core.base import BaseClient
 from wpstac.core.collections import CollectionsMixin
 from wpstac.core.items import ItemsMixin
 from wpstac.core.search import SearchMixin
+from wpstac.models.search import WorldPopSearchRequest
 
 
 class CoreCrudClient(BaseClient, CollectionsMixin, ItemsMixin, SearchMixin):
@@ -17,6 +18,7 @@ class CoreCrudClient(BaseClient, CollectionsMixin, ItemsMixin, SearchMixin):
         extensions (List[ApiExtension]): Enabled API extensions
         post_request_model: Model for POST request validation
     """
+    post_request_model = WorldPopSearchRequest
 
     def __init__(self, *args, **kwargs):
         """Initialize CoreCrudClient.

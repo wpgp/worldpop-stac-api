@@ -22,12 +22,15 @@ from starlette.datastructures import URL
 
 from wpstac.config import Settings
 from wpstac.db import get_connection
+from wpstac.models.search import WorldPopSearchRequest
 from wpstac.utils import ItemLinks, filter_fields, PagingLinks
 
 
 @attr.s
 class SearchMixin(AsyncBaseCoreClient, ABC):
     """Search operations mixin."""
+
+    post_request_model = attr.ib(default=WorldPopSearchRequest)
 
     async def _add_item_links(
             self,
@@ -60,7 +63,7 @@ class SearchMixin(AsyncBaseCoreClient, ABC):
                 request=request,
             ).get_links(extra_links=feature.get("links"))
 
-    async def _search_base(self, search_request: Search, request: Request) -> ItemCollection:
+    async def _search_base(self, search_request: WorldPopSearchRequest, request: Request) -> ItemCollection:
         """
         Perform base search operation across the STAC catalog.
 
@@ -75,6 +78,8 @@ class SearchMixin(AsyncBaseCoreClient, ABC):
 
         # Build base query filter
         filter_dict = {}
+
+        print("pagination ---------------------------", search_request)
 
         # Add collection filter
         if search_request.collections:

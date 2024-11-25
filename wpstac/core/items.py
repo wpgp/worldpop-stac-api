@@ -11,6 +11,7 @@ from stac_fastapi.types.search import NumType
 from stac_fastapi.types.stac import Item, ItemCollection
 
 from wpstac.db import get_connection
+from wpstac.models.search import WorldPopSearchRequest
 from wpstac.utils import ItemCollectionLinks
 
 
@@ -20,6 +21,8 @@ class ItemsMixin(AsyncBaseCoreClient, ABC):
 
     DEFAULT_PAGE_SIZE = 10
     MAX_PAGE_SIZE = 1000
+
+    post_request_model = attr.ib(default=WorldPopSearchRequest)
 
     def _validate_page_size(self, limit: Optional[int]) -> int:
         """Validate and normalize page size."""
