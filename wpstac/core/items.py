@@ -89,40 +89,21 @@ class ItemsMixin(AsyncBaseCoreClient, ABC):
         """
         await self.get_collection(collection_id, request=request)
 
-        limit = self._validate_page_size(limit)
-        try:
-            validated_bbox = self._validate_bbox(bbox)
-        except ValueError as e:
-            raise NotFoundError(str(e))
-
         base_args = {
             "collections": [collection_id],
-            "bbox": validated_bbox,
+            "bbox": bbox,
             "datetime": datetime,
             "limit": limit,
             "token": token,
         }
         clean = {k: v for k, v in base_args.items() if v is not None and v != []}
-
         search_request = self.post_request_model(**clean)
         item_collection = await self._search_base(search_request, request=request)
-
-        # Add pagination metadata
-        async with get_connection(request) as client:
-            db = client[request.app.state.settings.mongodb_dbname]
-            collection = db['items']
-            total = await collection.count_documents({"collection": collection_id})
-
-        item_collection["numberMatched"] = total
-        item_collection["numberReturned"] = len(item_collection.get("features", []))
-
         links = await ItemCollectionLinks(
-            collection_id=collection_id,
-            request=request
+            collection_id=collection_id, request=request
         ).get_links(extra_links=item_collection["links"])
         item_collection["links"] = links
-
-        return ItemCollection(**item_collection)
+        return item_collection
 
     async def get_item(self, item_id: str, collection_id: str, request: Optional[Request] = None, **kwargs) -> Item:
         """

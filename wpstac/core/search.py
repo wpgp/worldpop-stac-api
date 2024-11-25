@@ -29,185 +29,162 @@ from wpstac.utils import ItemLinks, filter_fields, PagingLinks
 class SearchMixin(AsyncBaseCoreClient, ABC):
     """Search operations mixin."""
 
-    async def _add_item_links(
-            self,
-            feature: Item,
-            collection_id: Optional[str] = None,
-            item_id: Optional[str] = None,
-            request: Optional[Request] = None,
-            fields: Optional[Any] = None
-    ) -> None:
-        """Add ItemLinks to the Item.
-
-        Args:
-            feature: STAC Item to add links to
-            collection_id: Optional collection ID
-            item_id: Optional item ID
-            request: FastAPI request object
-            fields: Fields filtering configuration
-        """
-        collection_id = feature.get("collection") or collection_id
-        item_id = feature.get("id") or item_id
-
-        if (
-                not fields or
-                fields.exclude is None or
-                "links" not in fields.exclude
-        ) and all([collection_id, item_id]):
-            feature["links"] = await ItemLinks(
-                collection_id=collection_id,
-                item_id=item_id,
-                request=request,
-            ).get_links(extra_links=feature.get("links"))
-
     async def _search_base(self, search_request: Search, request: Request) -> ItemCollection:
         """
-        Perform base search operation across the STAC catalog.
+        Perform a base search operation across the STAC catalog.
+
+        This internal method implements the core search functionality, used by both
+        GET and POST search endpoints.
 
         Args:
-            search_request: Search parameters from STAC API
-            request: FastAPI request object
+            search_request (Search): The search parameters.
+            request (Request): The incoming HTTP request.
 
         Returns:
-            ItemCollection containing matching items with pagination
+            ItemCollection: A STAC ItemCollection containing the search results.
         """
+
+        items: Dict[str, Any] = {}
+        features = []
         settings: Settings = request.app.state.settings
-
-        # Build base query filter
-        filter_dict = {}
-
-        # Add collection filter
-        if search_request.collections:
-            filter_dict["collection"] = {"$in": search_request.collections}
-
-        # Add IDs filter
-        if search_request.ids:
-            filter_dict["id"] = {"$in": search_request.ids}
-
-        # Add spatial filter
-        if search_request.bbox:
-            filter_dict["bbox"] = {
-                "$geoWithin": {
-                    "$box": [
-                        [search_request.bbox[0], search_request.bbox[1]],
-                        [search_request.bbox[2], search_request.bbox[3]]
-                    ]
-                }
-            }
-
-        # Add temporal filter
-        if search_request.datetime:
-            filter_dict["datetime"] = {"$gte": search_request.datetime}
-
-        # Handle pagination token
-        if search_request.token:
-            try:
-                direction, token_id = search_request.token.split(':')
-                if direction == 'next':
-                    filter_dict["_id"] = {"$gt": ObjectId(token_id)}
-                elif direction == 'prev':
-                    filter_dict["_id"] = {"$lt": ObjectId(token_id)}
-            except (ValueError, IndexError):
-                raise HTTPException(status_code=400, detail="Invalid pagination token")
-
         async with get_connection(request) as client:
             db = client[request.app.state.settings.mongodb_dbname]
             collection = db['items']
+            filter_dict = {}
+            if search_request.collections:
+                filter_dict["collection"] = {"$in": search_request.collections}
+            if search_request.ids:
+                filter_dict["id"] = {"$in": search_request.ids}
+            if search_request.bbox:
+                filter_dict["bbox"] = {
+                    "$geoWithin": {
+                        "$box": [
+                            [search_request.bbox[0], search_request.bbox[1]],
+                            [search_request.bbox[2], search_request.bbox[3]]
+                        ]
+                    }
+                }
+            if search_request.datetime:
+                filter_dict["datetime"] = {"$gte": search_request.datetime}
 
-            # Get total count for numberMatched
-            total_count = await collection.count_documents(filter_dict)
+            if search_request.token:
+                filter_dict["_id"] = {"$gte": ObjectId(search_request.token.split(':')[1])}
 
-            # Execute search query
-            cursor = (
-                collection.find(filter_dict)
-                .sort("_id", 1)  # Consistent ordering for pagination
-                .limit(search_request.limit + 1)  # Get one extra for next page token
-            )
+            if search_request.bbox:
+                cursor = collection.aggregate([
+                    {"$match": filter_dict},
+                    {"$match": {"id": {"$regex": ".*built_binary_100m_v1$"}}},
+                    {"$group": {
+                        "_id": "$collection",
+                        "item": {"$first": "$$ROOT"}
+                    }},
+                    {"$limit": search_request.limit + 1}
+                ])
 
-            # Convert cursor to list
-            items = []
-            async for item in cursor:
-                item["_id"] = str(item["_id"])
-                items.append(item)
-
-            # Handle pagination tokens
-            next_token = None
-            if len(items) > search_request.limit:
-                next_token = f"next:{items[search_request.limit - 1]['_id']}"
-                items = items[:search_request.limit]
-
-            prev_token = None
-            if items and search_request.token:
-                # Get previous page starting point
-                prev_cursor = (
-                    collection.find({"_id": {"$lt": ObjectId(items[0]["_id"])}})
-                    .sort("_id", -1)
-                    .limit(1)
-                )
-                prev_item = await prev_cursor.fetch_next
-                if prev_item:
-                    prev_token = f"prev:{str(prev_item['_id'])}"
-
-            # Create response collection
-            collection = ItemCollection(
-                type="FeatureCollection",
-                features=items,
-                links=[]
-            )
-
-            # Handle field filtering
-            cleaned_features: List[Item] = []
-            if settings.use_api_hydrate:
-                # Get base item for hydration
-                async def _get_base_item(collection_id: str) -> Dict[str, Any]:
-                    return await self._get_base_item(collection_id, request=request)
-
-                # Set up item cache
-                base_item_cache = settings.base_item_cache(
-                    fetch_base_item=_get_base_item,
-                    request=request
-                )
-
-                # Process each feature
-                for feature in collection.get("features") or []:
-                    base_item = await base_item_cache.get(feature.get("collection"))
-                    feature = hydrate(base_item, feature)
-
-                    # Filter fields if requested
-                    if search_request.fields:
-                        feature = filter_fields(
-                            feature,
-                            search_request.fields.include,
-                            search_request.fields.exclude
-                        )
-
-                    # Add required links
-                    await self._add_item_links(
-                        feature,
-                        collection_id=feature.get("collection"),
-                        item_id=feature.get("id"),
-                        request=request,
-                        fields=search_request.fields
-                    )
-                    cleaned_features.append(feature)
+                async for group in cursor:
+                    item = group["item"]
+                    item["_id"] = str(item["_id"])
+                    features.append(item)
             else:
-                cleaned_features = collection.get("features") or []
+                cursor = collection.find(filter_dict).limit(search_request.limit + 1)
+                async for item in cursor:
+                    item["_id"] = str(item["_id"])
+                    features.append(item)
 
-            # Update collection with processed features
-            collection["features"] = cleaned_features
+        next_token: Optional[str] = items.pop("next", None)
+        prev_token: Optional[str] = items.pop("prev", None)
 
-            # Add pagination links
-            collection["links"] = await PagingLinks(
-                request=request,
-                next=next_token,
-                prev=prev_token
-            ).get_links()
+        if len(features) > 0:
+            current_token = features[0]["_id"]
 
-            # Add count metadata
-            collection["numberMatched"] = total_count
-            collection["numberReturned"] = len(cleaned_features)
+            if len(features) > search_request.limit:
+                next_token = features[search_request.limit]["_id"]
+                features = features[:search_request.limit]
 
-            return collection
+            if search_request.token:
+                prev_items = await collection.find(
+                    {"_id": {"$lt": ObjectId(current_token)}},
+                    sort=[("_id", -1)],
+                    limit=search_request.limit
+                ).to_list(length=search_request.limit)
+
+                if prev_items:
+                    prev_token = str(prev_items[-1]["_id"])
+            else:
+                prev_token = None
+
+            print('next_token', next_token)
+            print('prev_token', prev_token)
+
+        collection = ItemCollection(
+            type="FeatureCollection",
+            features=features,
+            links=[],
+        )
+
+        exclude = search_request.fields.exclude
+        if exclude and len(exclude) == 0:
+            exclude = None
+        include = search_request.fields.include
+        if include and len(include) == 0:
+            include = None
+
+        async def _add_item_links(
+            feature: Item,
+            collection_id: Optional[str] = None,
+            item_id: Optional[str] = None,
+        ) -> None:
+            """Add ItemLinks to the Item.
+
+            If the fields extension is excluding links, then don't add them.
+            Also skip links if the item doesn't provide collection and item ids.
+            """
+            collection_id = feature.get("collection") or collection_id
+            item_id = feature.get("id") or item_id
+
+            if (
+                search_request.fields.exclude is None
+                or "links" not in search_request.fields.exclude
+                and all([collection_id, item_id])
+            ):
+                feature["links"] = await ItemLinks(
+                    collection_id=collection_id,
+                    item_id=item_id,
+                    request=request,
+                ).get_links(extra_links=feature.get("links"))
+
+        cleaned_features: List[Item] = []
+
+        if settings.use_api_hydrate:
+            async def _get_base_item(collection_id: str) -> Dict[str, Any]:
+                return await self._get_base_item(collection_id, request=request)
+
+            base_item_cache = settings.base_item_cache(
+                fetch_base_item=_get_base_item, request=request
+            )
+            for feature in collection.get("features") or []:
+                base_item = await base_item_cache.get(feature.get("collection"))
+                feature = hydrate(base_item, feature)
+
+                # Grab ids needed for links that may be removed by the fields extension.
+                collection_id = feature.get("collection")
+                item_id = feature.get("id")
+
+                feature = filter_fields(feature, include, exclude)
+                await _add_item_links(feature, collection_id, item_id)
+                cleaned_features.append(feature)
+        else:
+            for feature in collection.get("features") or []:
+                await _add_item_links(feature)
+                cleaned_features.append(feature)
+        collection["features"] = cleaned_features
+        collection["links"] = await PagingLinks(
+            request=request,
+            next=next_token,
+            prev=prev_token,
+        ).get_links()
+
+        return collection
 
     async def post_search(self, search_request: Search, request: Optional[Request] = None, **kwargs) -> ItemCollection:
         """
@@ -239,6 +216,7 @@ class SearchMixin(AsyncBaseCoreClient, ABC):
         #     "numberReturned": len(response_features),
         # }
         # return ItemCollection(**response_data)
+
         return await self._search_base(search_request, request=request)
 
     async def get_search(
@@ -287,7 +265,6 @@ class SearchMixin(AsyncBaseCoreClient, ABC):
         """
         if limit is not None:
             limit = self._validate_page_size(limit)
-
         base_args = {
             "collections": collections,
             "ids": ids,

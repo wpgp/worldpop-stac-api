@@ -8,7 +8,8 @@ from stac_pydantic.version import STAC_VERSION
 
 
 from stac_fastapi.api.app import StacApi
-from stac_fastapi.api.models import create_get_request_model, create_post_request_model
+from stac_fastapi.api.models import create_get_request_model, create_post_request_model, create_request_model, \
+    ItemCollectionUri
 from stac_fastapi.api.errors import add_exception_handlers, DEFAULT_STATUS_CODES
 from stac_fastapi.extensions.core import (
     FieldsExtension,
@@ -29,14 +30,14 @@ from wpstac.extensions.filter import FiltersClient
 wp_stac_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(wp_stac_root)
 
-settings = Settings(enable_response_models=True)
+settings = Settings()
 
 extensions_map: Dict[str, ApiExtension] = {
     "query": QueryExtension(),
     "sort": SortExtension(),
     "fields": FieldsExtension(),
     "pagination": TokenPaginationExtension(),
-    "filter": FilterExtension(client=FiltersClient()),
+    # "filter": FilterExtension(client=FiltersClient()),
 }
 
 if enabled_extensions := os.getenv("ENABLED_EXTENSIONS"):
@@ -50,6 +51,11 @@ else:
 
 post_request_model = create_post_request_model(extensions)
 get_request_model = create_get_request_model(extensions)
+items_get_request_model = create_request_model(
+    "ItemCollectionUriWithToken",
+    base_model=ItemCollectionUri,
+    mixins=[TokenPaginationExtension().GET],
+)
 
 api = StacApi(
     settings=settings,
@@ -58,6 +64,7 @@ api = StacApi(
     response_class=ORJSONResponse,
     search_get_request_model=get_request_model,
     search_post_request_model=post_request_model,
+    items_get_request_model=items_get_request_model,
     stac_version=STAC_VERSION,
     api_version=__version__,
 )

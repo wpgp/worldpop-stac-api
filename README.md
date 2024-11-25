@@ -21,12 +21,6 @@ A specialized STAC API implementation for accessing WorldPop geospatial datasets
 
 ## Installation
 
-### As a Package
-
-```bash
-pip install worldpop-stac
-```
-
 ### From Source
 
 ```bash
@@ -97,15 +91,17 @@ stac = WorldPopSTAC(settings=settings)
 
 ### Quick Start
 
+1. Set up your environment:
 ```bash
-# Set environment variables (or use .env file)
-export MONGODB_HOST=localhost
-export MONGODB_PORT=27017
-export MONGODB_DB=stac_worldpop_db
-export APP_HOST=0.0.0.0
-export APP_PORT=8000
+# Copy example environment file
+cp .env.example .env
 
-# Run the server
+# Edit .env file with your configuration
+nano .env
+```
+
+2. Run the server:
+```bash
 python -m wpstac.app
 ```
 
@@ -117,9 +113,7 @@ docker build -t worldpop-stac-api .
 
 # Run the container
 docker run -p 8000:8000 \
-  -e MONGODB_HOST=mongodb \
-  -e MONGODB_PORT=27017 \
-  -e MONGODB_DB=stac_worldpop_db \
+  --env-file .env \
   worldpop-stac-api
 ```
 
@@ -182,19 +176,35 @@ curl -X POST http://localhost:8000/search \
 
 ## Configuration
 
-### Environment Variables
+### Environment Setup
+
+1. Copy the example environment file:
+```bash
+cp .env.example .env
+```
+
+2. Edit the `.env` file according to your needs.
+
+### Required Environment Variables
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| MONGODB_HOST | MongoDB host | localhost | Yes |
+| MONGODB_PORT | MongoDB port | 27017 | Yes |
+| MONGODB_DB | Database name | stac_worldpop_db | Yes |
+| MONGODB_USERNAME | MongoDB username | None | No |
+| MONGODB_PASSWORD | MongoDB password | None | No |
+
+### Optional Settings
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| MONGODB_HOST | MongoDB host | localhost |
-| MONGODB_PORT | MongoDB port | 27017 |
-| MONGODB_DB | Database name | stac_worldpop_db |
-| MONGODB_USERNAME | MongoDB username | None |
-| MONGODB_PASSWORD | MongoDB password | None |
 | APP_HOST | API host | 127.0.0.1 |
 | APP_PORT | API port | 8000 |
-| LOG_LEVEL | Logging level | INFO |
 | RELOAD | Enable hot reload | false |
+| UVICORN_ROOT_PATH | Base path for the API | "" |
+| USE_CACHE | Enable caching | true |
+| CACHE_TTL | Cache time-to-live (seconds) | 3600 |
 | ENABLE_RESPONSE_MODELS | Enable pydantic validation | true |
 
 ### API Extensions
@@ -210,55 +220,17 @@ Enable/disable extensions using the `ENABLED_EXTENSIONS` environment variable:
 export ENABLED_EXTENSIONS=query,sort,fields,filter
 ```
 
-## Development
-
-### Running Tests
-
-```bash
-# Install dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=wpstac
-```
-
-### Code Style
-
-The project uses `ruff` for linting and formatting:
-
-```bash
-# Install pre-commit hooks
-pre-commit install
-
-# Run linting
-ruff check .
-
-# Run formatting
-ruff format .
-```
-
 ### Documentation
 
 API documentation is available at:
 - Swagger UI: http://localhost:8000/api.html
 - OpenAPI JSON: http://localhost:8000/api
 
-Generate code documentation:
-```bash
-pdocs as_markdown \
-  --output_dir docs/api/ \
-  --exclude_source \
-  wpstac
-```
-
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Run tests and ensure code style compliance
+3. Make your changes 
 4. Submit a pull request
 
 ## License

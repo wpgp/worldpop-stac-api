@@ -137,11 +137,6 @@ class BaseLinks:
 
         return links
 
-    def clean_links(self, links: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Remove None values from links and validate structure."""
-        return [{k: v for k, v in link.items() if v is not None}
-                for link in links if link.get("rel") and link.get("href")]
-
 
 @attr.s
 class PagingLinks(BaseLinks):
@@ -149,27 +144,10 @@ class PagingLinks(BaseLinks):
 
     next: Optional[str] = attr.ib(kw_only=True, default=None)
     prev: Optional[str] = attr.ib(kw_only=True, default=None)
-    page_size: Optional[int] = attr.ib(kw_only=True, default=None)
-
-
-    def _validate_token(self, token: str) -> bool:
-        """Validate token format."""
-        try:
-            direction, token_id = token.split(':')
-            return direction in ('next', 'prev') and bool(token_id)
-        except ValueError:
-            return False
-
-    def _add_pagination_params(self, params: Dict) -> Dict:
-        """Add pagination parameters to query params."""
-        if self.page_size:
-            params["limit"] = str(self.page_size)
-        return params
-
 
     def link_next(self) -> Optional[Dict[str, Any]]:
         """Create link for next page."""
-        if self.next is not None and self._validate_token(self.next):
+        if self.next is not None:
             method = self.request.method
             if method == "GET":
                 href = str(self.request.url.include_query_params(token=f"next:{self.next}"))
@@ -259,21 +237,12 @@ class CollectionLinks(CollectionLinksBase):
 class ItemCollectionLinks(CollectionLinksBase):
     """Create inferred links specific to collections."""
 
-    filter_params: Optional[Dict] = attr.ib(default=None)
-
-    def _build_href(self, base_path: str) -> str:
-        """Build href with filter parameters."""
-        href = self.resolve(base_path)
-        if self.filter_params:
-            return merge_params(href, self.filter_params)
-        return href
-
     def link_self(self) -> Dict:
         """Return the self link."""
         return dict(
             rel=Relations.self.value,
             type=MimeTypes.geojson.value,
-            href=self._build_href(f"collections/{self.collection_id}/items"),
+            href=self.resolve(f"collections/{self.collection_id}/items"),
         )
 
     def link_parent(self) -> Dict:
