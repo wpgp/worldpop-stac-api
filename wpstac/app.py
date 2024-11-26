@@ -37,7 +37,7 @@ extensions_map: Dict[str, ApiExtension] = {
     "sort": SortExtension(),
     "fields": FieldsExtension(),
     "pagination": TokenPaginationExtension(),
-    # "filter": FilterExtension(client=FiltersClient()),
+    "filter": FilterExtension(client=FiltersClient()),
 }
 
 if enabled_extensions := os.getenv("ENABLED_EXTENSIONS"):
@@ -51,16 +51,23 @@ else:
 
 post_request_model = create_post_request_model(extensions)
 get_request_model = create_get_request_model(extensions)
+
 items_get_request_model = create_request_model(
     "ItemCollectionUriWithToken",
     base_model=ItemCollectionUri,
     mixins=[TokenPaginationExtension().GET],
 )
 
+client = CoreCrudClient.create(
+    post_request_model=post_request_model,
+    settings=settings,
+    extensions=extensions
+)
+
 api = StacApi(
     settings=settings,
     extensions=extensions,
-    client=CoreCrudClient(post_request_model=post_request_model),
+    client=client,
     response_class=ORJSONResponse,
     search_get_request_model=get_request_model,
     search_post_request_model=post_request_model,

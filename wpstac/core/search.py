@@ -102,19 +102,27 @@ class SearchMixin(AsyncBaseCoreClient, ABC):
                 features = features[:search_request.limit]
 
             if search_request.token:
-                prev_items = await collection.find(
-                    {"_id": {"$lt": ObjectId(current_token)}},
-                    sort=[("_id", -1)],
-                    limit=search_request.limit
-                ).to_list(length=search_request.limit)
+                prev_count = await collection.count_documents({
+                    "_id": {"$lt": ObjectId(current_token)},
+                    **{k: v for k, v in filter_dict.items() if k != "_id"}
+                })
 
-                if prev_items:
-                    prev_token = str(prev_items[-1]["_id"])
+                if prev_count > 0:
+                    prev_items = await collection.find(
+                        {"_id": {"$lt": ObjectId(current_token)}},
+                        sort=[("_id", -1)],
+                        limit=search_request.limit
+                    ).to_list(length=search_request.limit)
+
+                    if prev_items:
+                        prev_token = str(prev_items[-1]["_id"])
+                else:
+                    prev_token = None
             else:
                 prev_token = None
 
-            print('next_token', next_token)
-            print('prev_token', prev_token)
+            # print('next_token', next_token)
+            # print('prev_token', prev_token)
 
         collection = ItemCollection(
             type="FeatureCollection",
